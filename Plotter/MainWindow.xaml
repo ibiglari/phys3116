@@ -1,0 +1,60 @@
+﻿<Window x:Class="Plotter.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Plotter"
+        xmlns:oxy="http://oxyplot.org/wpf"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <TabControl>
+            <!-- First Tab: 3D Plot -->
+            <TabItem Header="3D Plot">
+                <Grid>
+                    <!-- Define rows, first for the controls, second for the plot -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- For the ComboBoxes and Button -->
+                        <RowDefinition Height="*"/>
+                        <!-- For the PlotView to fill remaining space -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Dropdowns for selecting X and Y axis properties -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Center">
+                        <Button Content="Animate" Width="120" Click="OnAnimateClick"/>
+                    </StackPanel>
+                    <HelixToolkit:HelixViewport3D x:Name="helixViewport"  Grid.Row="1" Background="Black" xmlns:HelixToolkit="http://helix-toolkit.org/wpf" />
+                </Grid>
+            </TabItem>
+
+            <!-- Second Tab: 2D Scatter Plot -->
+            <TabItem Header="2D Scatter Plot" IsSelected="True">
+                <Grid>
+                    <!-- Define rows, first for the controls, second for the plot -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- For the ComboBoxes and Button -->
+                        <RowDefinition Height="*"/>
+                        <!-- For the PlotView to fill remaining space -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Dropdowns for selecting X and Y axis properties -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Center">
+                        <ComboBox x:Name="xAxisComboBox" Width="150" Margin="10" 
+                                  SelectionChanged="OnAxisSelectionChanged"/>
+                        <ComboBox x:Name="yAxisComboBox" Width="150" Margin="10" 
+                                  SelectionChanged="OnAxisSelectionChanged"/>
+                        <ComboBox x:Name="colorComboBox" Width="150" Margin="10" 
+                                  SelectionChanged="OnAxisSelectionChanged"/>
+                        <Button Content="Generate Plot" Width="120" Click="OnGeneratePlotClick"/>
+                    </StackPanel>
+
+                    <!-- OxyPlot PlotView for 2D scatter plot -->
+                    <oxy:PlotView Name="scatterPlotView" Grid.Row="1" Model="{Binding ScatterPlotModel}"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+
+</Window>
