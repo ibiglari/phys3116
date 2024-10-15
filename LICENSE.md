@@ -2,7 +2,7 @@
 
 **Version 1.0, October 2024**
 
-**Copyright © [Your Name]. All rights reserved.**
+**Copyright © Me. All rights reserved.**
 
 ## 1. Definitions
 
