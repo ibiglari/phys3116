@@ -11,21 +11,23 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
+using SvgExporter = OxyPlot.SvgExporter;
 
 namespace Plotter;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
 public partial class MainWindow
 {
     private const double MinRadius = 0.05;
     private const double MaxRadius = 0.5;
+
+    private DispatcherTimer _rotationTimer;
+    private AxisAngleRotation3D _rotation;
+
     private PlotModel ScatterPlotModel { get; set; } = null!;
     private List<Cluster> _clusters = null!;
-    private readonly Random _random = new();
     private readonly Dictionary<GeometryModel3D, Cluster> _geometryModelToClusterMap = new();
 
+#if RENDER_GALAXY
     private readonly Cluster _galaxy = new()
     {
         ID = "MilkyWay",
@@ -39,6 +41,7 @@ public partial class MainWindow
             {"FeH", "0.02"}
     }
     };
+#endif //RENDER_GALAXY
 
     public MainWindow()
     {
@@ -53,8 +56,7 @@ public partial class MainWindow
 
         if (openFileDialog.ShowDialog() == true)
         {
-            string selectedFilePath = openFileDialog.FileName;
-            LoadAndProcessData(selectedFilePath);
+            LoadAndProcessData(openFileDialog.FileName);
             PopulateComboBoxes();
             CreateGalaxyMap();
         }
@@ -63,6 +65,14 @@ public partial class MainWindow
             MessageBox.Show("No file selected. The application will now close.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Application.Current.Shutdown();
         }
+    }
+
+    private void LoadCsvData(string csvPath)
+    {
+        using var reader = new StreamReader(csvPath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<ClusterMap>();
+        _clusters = csv.GetRecords<Cluster>().ToList();
     }
 
     private void LoadAndProcessData(string csvPath)
@@ -101,6 +111,62 @@ public partial class MainWindow
         colorComboBox.ItemsSource = propertyKeys;
     }
 
+    private void CreateGalaxyMap()
+    {
+        var scatterGroup = new Model3DGroup();
+        foreach (var star in _clusters)
+        {
+            scatterGroup.Children.Add(CreateSphere(star.Position, star.Radius, star.Color, star));
+        }
+
+        var lights = CreateLights();
+        var plane = CreatePlane();
+
+        helixViewport.Children.Add(new ModelVisual3D { Content = scatterGroup });
+        helixViewport.Children.Add(new ModelVisual3D { Content = lights });
+        helixViewport.Children.Add(new ModelVisual3D { Content = plane });
+        helixViewport.Children.Add(new CoordinateSystemVisual3D());
+    }
+
+    private Model3D CreatePlane()
+    {
+        var meshBuilder = new MeshBuilder();
+        double size = 5; // A large value to simulate an infinite plane
+        meshBuilder.AddQuad(
+            new Point3D(-size, -size, 0),
+            new Point3D(size, -size, 0),
+            new Point3D(size, size, 0),
+            new Point3D(-size, size, 0)
+        );
+
+        var mesh = meshBuilder.ToMesh();
+        var material = new DiffuseMaterial(new SolidColorBrush(Color.FromArgb(128, 0, 0, 255))); // Semi-transparent blue
+
+        return new GeometryModel3D(mesh, material);
+    }
+
+    private static Model3DGroup CreateLights()
+    {
+        var lights = new Model3DGroup();
+        lights.Children.Add(new AmbientLight(Colors.White));
+        lights.Children.Add(new DirectionalLight(Colors.White, new Vector3D(1, -1, -1)));
+        return lights;
+    }
+
+    private Model3D CreateSphere(Point3D center, double radius, Color color, Cluster cluster)
+    {
+        var mesh = new MeshBuilder();
+        mesh.AddSphere(center, radius);
+
+        var material = MaterialHelper.CreateMaterial(color);
+        var geometryModel = new GeometryModel3D(mesh.ToMesh(), material);
+
+        // Add the geometryModel and cluster to the dictionary
+        _geometryModelToClusterMap[geometryModel] = cluster;
+
+        return geometryModel;
+    }
+
     private void GeneratePlot()
     {
         var xProperty = xAxisComboBox.SelectedItem?.ToString();
@@ -122,7 +188,8 @@ public partial class MainWindow
 
     private void OnAnimateClick(object sender, RoutedEventArgs e)
     {
-        StartOrbitAnimation();
+        StartRotationAnimation(); // Start the rotation animation
+        // StartOrbitAnimation(); // TODO: Fix the orbital animation
     }
 
     private void OnAxisSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -144,8 +211,10 @@ public partial class MainWindow
         ScatterPlotModel.Series.Clear();
         PopulateScatterSeries(scatterSeries, xValues, yValues, colorValues, xProperty, yProperty, colorProperty);
 
- 
-        // AddGalaxyToScatterPlot(xProperty, yProperty);
+#if RENDER_GALAXY
+        AddGalaxyToScatterPlot(xProperty, yProperty);
+#endif // RENDER_GALAXY
+
         ScatterPlotModel.Series.Add(scatterSeries);
 
         AddFittedLineToPlot(xValues, yValues);
@@ -160,19 +229,6 @@ public partial class MainWindow
             SetupColorAxis(colorProperty, minColorValue, maxColorValue);
         }
         scatterPlotView.Model = ScatterPlotModel;
-    }
-
-    private void SetupColorAxis(string property, double minColorValue, double maxColorValue)
-    {
-        var colorAxis = new LinearColorAxis
-        {
-            Position = AxisPosition.Right,
-            Palette = OxyPalettes.Viridis(), // You can choose a different palette if you prefer
-            Title = property,
-            Minimum = minColorValue, // Set to actual minimum value
-            Maximum = maxColorValue  // Set to actual maximum value
-        };
-        ScatterPlotModel.Axes.Add(colorAxis);
     }
 
     private void SetupAxes(string xProperty, string yProperty)
@@ -232,27 +288,17 @@ public partial class MainWindow
         }
     }
 
-    private void AddGalaxyToScatterPlot(string xProperty, string yProperty)
+    private void SetupColorAxis(string property, double minColorValue, double maxColorValue)
     {
-        // Add the galaxy cluster if it contains the specified properties
-        if (!_galaxy.Properties.TryGetValue(xProperty, out var xGalaxyObj) ||
-            !_galaxy.Properties.TryGetValue(yProperty, out var yGalaxyObj) ||
-            xGalaxyObj is not string xGalaxyStr || yGalaxyObj is not string yGalaxyStr ||
-            !double.TryParse(xGalaxyStr, out var xGalaxyValue) ||
-            !double.TryParse(yGalaxyStr, out var yGalaxyValue)) return;
-
-        // Create a separate ScatterSeries for the galaxy cluster
-        var galaxySeries = new ScatterSeries
+        var colorAxis = new LinearColorAxis
         {
-            MarkerType = MarkerType.Diamond, // Change the marker type
-            MarkerSize = 10, // Increase the marker size
-            MarkerFill = OxyColors.Yellow // Change the marker color
+            Position = AxisPosition.Right,
+            Palette = OxyPalettes.Viridis(), // You can choose a different palette if you prefer
+            Title = property,
+            Minimum = minColorValue, // Set to actual minimum value
+            Maximum = maxColorValue  // Set to actual maximum value
         };
-
-        galaxySeries.Points.Add(new ScatterPoint(xGalaxyValue, yGalaxyValue));
-
-        // Add the galaxy series to the plot model
-        ScatterPlotModel.Series.Add(galaxySeries);
+        ScatterPlotModel.Axes.Add(colorAxis);
     }
 
     private void AddFittedLineToPlot(List<double> xValues, List<double> yValues)
@@ -275,49 +321,56 @@ public partial class MainWindow
         ScatterPlotModel.Series.Add(lineSeries);
     }
 
-    private void LoadCsvData(string csvPath)
+    private void SavePlotAsSvg(string filePath)
     {
-        using var reader = new StreamReader(csvPath);
-        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-        csv.Context.RegisterClassMap<ClusterMap>();
-        _clusters = csv.GetRecords<Cluster>().ToList();
-    }
+        var exporter = new SvgExporter { Width = 1500, Height = 1000 };
 
-    private void CreateGalaxyMap()
-    {
-        var scatterGroup = new Model3DGroup();
-        foreach (var star in _clusters)
+        using (var stream = File.Create(filePath))
         {
-            scatterGroup.Children.Add(CreateSphere(star.Position, star.Radius, star.Color, star));
+            exporter.Export(ScatterPlotModel, stream);
         }
 
-        var lights = CreateLights();
-        helixViewport.Children.Add(new ModelVisual3D { Content = scatterGroup });
-        helixViewport.Children.Add(new ModelVisual3D { Content = lights });
-        helixViewport.Children.Add(new CoordinateSystemVisual3D());
+        MessageBox.Show($"Plot saved to {filePath}", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private static Model3DGroup CreateLights()
+    private void OnSavePlotClick(object sender, RoutedEventArgs e)
     {
-        var lights = new Model3DGroup();
-        lights.Children.Add(new AmbientLight(Colors.White));
-        lights.Children.Add(new DirectionalLight(Colors.White, new Vector3D(1, -1, -1)));
-        return lights;
+        var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "SVG files (*.svg)|*.svg|All files (*.*)|*.*",
+            DefaultExt = "svg"
+        };
+
+        if (saveFileDialog.ShowDialog() == true)
+        {
+            SavePlotAsSvg(saveFileDialog.FileName);
+        }
     }
 
-    private Model3D CreateSphere(Point3D center, double radius, Color color, Cluster cluster)
+#if RENDER_GALAXY
+    private void AddGalaxyToScatterPlot(string xProperty, string yProperty)
     {
-        var mesh = new MeshBuilder();
-        mesh.AddSphere(center, radius);
+        // Add the galaxy cluster if it contains the specified properties
+        if (!_galaxy.Properties.TryGetValue(xProperty, out var xGalaxyObj) ||
+            !_galaxy.Properties.TryGetValue(yProperty, out var yGalaxyObj) ||
+            xGalaxyObj is not string xGalaxyStr || yGalaxyObj is not string yGalaxyStr ||
+            !double.TryParse(xGalaxyStr, out var xGalaxyValue) ||
+            !double.TryParse(yGalaxyStr, out var yGalaxyValue)) return;
 
-        var material = MaterialHelper.CreateMaterial(color);
-        var geometryModel = new GeometryModel3D(mesh.ToMesh(), material);
+        // Create a separate ScatterSeries for the galaxy cluster
+        var galaxySeries = new ScatterSeries
+        {
+            MarkerType = MarkerType.Diamond, // Change the marker type
+            MarkerSize = 10, // Increase the marker size
+            MarkerFill = OxyColors.Yellow // Change the marker color
+        };
 
-        // Add the geometryModel and cluster to the dictionary
-        _geometryModelToClusterMap[geometryModel] = cluster;
+        galaxySeries.Points.Add(new ScatterPoint(xGalaxyValue, yGalaxyValue));
 
-        return geometryModel;
+        // Add the galaxy series to the plot model
+        ScatterPlotModel.Series.Add(galaxySeries);
     }
+#endif // RENDER_GALAXY
 
     private void StartOrbitAnimation()
     {
@@ -356,18 +409,39 @@ public partial class MainWindow
             .FirstOrDefault(m => m.Content is Model3DGroup group && group.Children.OfType<GeometryModel3D>()
             .Any(g => _geometryModelToClusterMap[g] == cluster));
 
-        if (modelVisual != null && modelVisual.Content is Model3DGroup modelGroup)
+        if (modelVisual is not { Content: Model3DGroup modelGroup }) return;
         {
             // Find the specific GeometryModel3D within the Model3DGroup
             var geometryModel = modelGroup.Children.OfType<GeometryModel3D>()
                 .FirstOrDefault(g => _geometryModelToClusterMap[g] == cluster);
 
-            if (geometryModel != null)
-            {
-                var transform = new TranslateTransform3D(newPosition.X - cluster.Position.X, newPosition.Y - cluster.Position.Y, newPosition.Z - cluster.Position.Z);
-                geometryModel.Transform = transform;
-                cluster.Position = newPosition;
-            }
+            if (geometryModel == null) return;
+            var transform = new TranslateTransform3D(newPosition.X - cluster.Position.X, newPosition.Y - cluster.Position.Y, newPosition.Z - cluster.Position.Z);
+            geometryModel.Transform = transform;
+            cluster.Position = newPosition;
+        }
+    }
+
+    private void StartRotationAnimation()
+    {
+        _rotation = new AxisAngleRotation3D(new Vector3D(0, 0, 1), 0); // Rotate around the Z-axis
+        var rotateTransform = new RotateTransform3D(_rotation);
+        helixViewport.Camera.Transform = rotateTransform;
+
+        _rotationTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16) // ~60 FPS
+        };
+        _rotationTimer.Tick += (s, e) => UpdateRotation();
+        _rotationTimer.Start();
+    }
+
+    private void UpdateRotation()
+    {
+        _rotation.Angle += 0.5; // Adjust the rotation speed as needed
+        if (_rotation.Angle >= 360)
+        {
+            _rotation.Angle -= 360;
         }
     }
 }

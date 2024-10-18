@@ -48,6 +48,7 @@
                         <ComboBox x:Name="colorComboBox" Width="150" Margin="10" 
                                   SelectionChanged="OnAxisSelectionChanged"/>
                         <Button Content="Generate Plot" Width="120" Click="OnGeneratePlotClick"/>
+                        <Button Content="Save Plot" Width="120" Click="OnSavePlotClick"/>
                     </StackPanel>
 
                     <!-- OxyPlot PlotView for 2D scatter plot -->

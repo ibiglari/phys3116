@@ -22,18 +22,18 @@ public class Cluster
     {
         get
         {
-            if (fColor == null)
-                try
-                {
-                    var metallicity = double.Parse(Properties["[Fe/H]"].ToString());
-                    var normalizedMetallicity = (metallicity - MinMetallicity) / (MaxMetallicity - MinMetallicity);
-                    normalizedMetallicity = Math.Max(0, Math.Min(1, normalizedMetallicity)); // Clamp between 0 and 1
-                    fColor = ViridisColorMap[normalizedMetallicity].ToMediaColor();
-                }
-                catch (Exception e)
-                {
-                    fColor = Color.FromRgb(0, 255, 0);
-                }
+            if (fColor != null) return (Color)fColor;
+            try
+            {
+                var metallicity = double.Parse(Properties["[Fe/H]"].ToString());
+                var normalizedMetallicity = (metallicity - MinMetallicity) / (MaxMetallicity - MinMetallicity);
+                normalizedMetallicity = Math.Max(0, Math.Min(1, normalizedMetallicity)); // Clamp between 0 and 1
+                fColor = ViridisColorMap[normalizedMetallicity].ToMediaColor();
+            }
+            catch (Exception e)
+            {
+                fColor = Color.FromRgb(0, 255, 0);
+            }
 
             return (Color)fColor;
         }
@@ -51,7 +51,7 @@ public class Cluster
             }
             catch (Exception e)
             {
-                return 0; // TODO: Fix
+                return 0;
             }
         }
     }

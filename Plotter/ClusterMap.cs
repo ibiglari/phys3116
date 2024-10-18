@@ -32,8 +32,8 @@ public sealed class ClusterMap : ClassMap<Cluster>
 
             foreach (var header in row.HeaderRecord)
             {
-                // Skip the fixed fields (ID, X, Y, Z, AngularMomentumX, AngularMomentumY, AngularMomentumZ)
-                if (header is "ID" /*or "X" or "Y" or "Z" or "AngularMomentumX" or "AngularMomentumY" or "AngularMomentumZ"*/)
+                // Skip the ID
+                if (header is "ID")
                     continue;
 
                 dynamicFields[header] = row.GetField(header);
