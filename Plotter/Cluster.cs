@@ -30,7 +30,7 @@ public class Cluster
                 normalizedMetallicity = Math.Max(0, Math.Min(1, normalizedMetallicity)); // Clamp between 0 and 1
                 fColor = ViridisColorMap[normalizedMetallicity].ToMediaColor();
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 fColor = Color.FromRgb(0, 255, 0);
             }
@@ -49,7 +49,7 @@ public class Cluster
             {
                 return double.Parse(Properties["M_V,t"].ToString() ?? "");
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 return 0;
             }
